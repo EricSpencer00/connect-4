@@ -1,11 +1,15 @@
 import math
 import random
+import time
 
 ROWS = 6
 COLS = 7
 EMPTY = 0
 PLAYER_PIECE = 1
 AI_PIECE = 2
+
+# Evaluation display settings
+SHOW_EVALUATION = True
 
 def create_board():
     """Creates a new game board."""
@@ -61,12 +65,16 @@ def print_board(board):
 
 if __name__ == '__main__':
     from ai import get_ai_move
+    from evaluator import print_evaluation_bar
 
     board = create_board()
     game_over = False
     turn = random.choice([0, 1]) # 0 for Player, 1 for AI
 
     while not game_over:
+        if SHOW_EVALUATION and not game_over:
+            print_evaluation_bar(board, turn)
+            
         if turn == 0: # Player's turn
             print_board(board)
             try:
