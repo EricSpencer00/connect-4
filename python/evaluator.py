@@ -81,12 +81,13 @@ def minimax_mate_finder(board, depth, alpha, beta, maximizing_player, current_de
         
         for col in valid_locations:
             row = get_next_open_row(board, col)
-            b_copy = [row[:] for row in board]
-            drop_piece(b_copy, row, col, AI_PIECE)
-            
-            _, new_score, new_mate_in = minimax_mate_finder(
-                b_copy, depth - 1, alpha, beta, False, current_depth + 1
-            )
+            if row is not None:
+                b_copy = [r[:] for r in board]  # Proper deep copy of the board
+                drop_piece(b_copy, row, col, AI_PIECE)
+                
+                _, new_score, new_mate_in = minimax_mate_finder(
+                    b_copy, depth - 1, alpha, beta, False, current_depth + 1
+                )
             
             # For the AI to have a forced win, *all* of the player's responses must lead to a mate
             if new_mate_in is None:
@@ -122,12 +123,13 @@ def minimax_mate_finder(board, depth, alpha, beta, maximizing_player, current_de
         
         for col in valid_locations:
             row = get_next_open_row(board, col)
-            b_copy = [row[:] for row in board]
-            drop_piece(b_copy, row, col, PLAYER_PIECE)
-            
-            _, new_score, new_mate_in = minimax_mate_finder(
-                b_copy, depth - 1, alpha, beta, True, current_depth + 1
-            )
+            if row is not None:
+                b_copy = [r[:] for r in board]  # Proper deep copy of the board
+                drop_piece(b_copy, row, col, PLAYER_PIECE)
+                
+                _, new_score, new_mate_in = minimax_mate_finder(
+                    b_copy, depth - 1, alpha, beta, True, current_depth + 1
+                )
             
             # If any move by the player can avoid mate, then there's no forced win for AI
             if new_mate_in is None:
@@ -173,28 +175,31 @@ def evaluate_mate_in_x(board, max_depth=10):
     valid_locations = get_valid_locations(board)
     for col in valid_locations:
         row = get_next_open_row(board, col)
-        b_copy = [row[:] for row in board]
-        drop_piece(b_copy, row, col, AI_PIECE)
-        if winning_move(b_copy, AI_PIECE):
-            # Check if player can prevent by playing first
-            player_can_win_first = False
-            for player_col in valid_locations:
-                player_row = get_next_open_row(board, player_col)
-                player_copy = [row[:] for row in board]
-                drop_piece(player_copy, player_row, player_col, PLAYER_PIECE)
-                if winning_move(player_copy, PLAYER_PIECE):
-                    player_can_win_first = True
-                    break
-            if not player_can_win_first:
-                return "AI wins", 1
+        if row is not None:
+            b_copy = [r[:] for r in board]  # Proper deep copy
+            drop_piece(b_copy, row, col, AI_PIECE)
+            if winning_move(b_copy, AI_PIECE):
+                # Check if player can prevent by playing first
+                player_can_win_first = False
+                for player_col in valid_locations:
+                    player_row = get_next_open_row(board, player_col)
+                    if player_row is not None:
+                        player_copy = [r[:] for r in board]  # Proper deep copy
+                        drop_piece(player_copy, player_row, player_col, PLAYER_PIECE)
+                        if winning_move(player_copy, PLAYER_PIECE):
+                            player_can_win_first = True
+                            break
+                if not player_can_win_first:
+                    return "AI wins", 1
     
     # Check if next move is winning for player
     for col in valid_locations:
         row = get_next_open_row(board, col)
-        b_copy = [row[:] for row in board]
-        drop_piece(b_copy, row, col, PLAYER_PIECE)
-        if winning_move(b_copy, PLAYER_PIECE):
-            return "Player wins", 1
+        if row is not None:
+            b_copy = [r[:] for r in board]  # Proper deep copy
+            drop_piece(b_copy, row, col, PLAYER_PIECE)
+            if winning_move(b_copy, PLAYER_PIECE):
+                return "Player wins", 1
     
     # Try increasing depths for deeper analysis
     for depth in range(4, max_depth + 1, 2):  # Use even depths for complete move sequences
