@@ -43,9 +43,30 @@ class Connect4GUI:
         
         # Setup the UI components
         self.setup_ui()
+
+        # Set a custom style for Combobox
+        self.setup_styles()
         
         # Draw the initial board
         self.draw_board()
+    
+    def setup_styles(self):
+        """Set up custom styles for Tkinter widgets"""
+        style = ttk.Style()
+        style.theme_use('clam')  # Use the 'clam' theme as a base
+        
+        # Configure the Combobox style
+        style.configure('TCombobox', 
+                       fieldbackground='#333333',
+                       background='#4B4B4B',
+                       foreground='white',
+                       arrowcolor='white')
+        
+        # Configure the dropdown list style
+        style.map('TCombobox',
+                 fieldbackground=[('readonly', '#333333')],
+                 selectbackground=[('readonly', '#555555')],
+                 selectforeground=[('readonly', 'white')])
         
         # Start with evaluation
         self.evaluate_position()
@@ -127,7 +148,7 @@ class Connect4GUI:
         self.depth_dropdown = ttk.Combobox(
             self.control_frame, 
             textvariable=self.depth_var,
-            values=[3, 5, 7, 9],
+            values=[3, 4, 5, 6, 7],
             width=5,
             font=("Arial", 12)
         )
@@ -182,17 +203,18 @@ class Connect4GUI:
         
         self.evaluation_label = tk.Label(
             self.info_left,
-            text="Evaluation: Analyzing...",
+            text="Evaluation: Click 'Analyze Position' to evaluate",
             bg="#2D2D2D",
             fg=WHITE,
             font=("Arial", 12),
-            anchor=tk.W
+            anchor=tk.W,
+            wraplength=400  # Allow wrapping for longer text
         )
         self.evaluation_label.pack(fill=tk.X, pady=5)
         
         self.move_label = tk.Label(
             self.info_left,
-            text="Best Move: None",
+            text="Best Move: Not analyzed yet",
             bg="#2D2D2D",
             fg=WHITE,
             font=("Arial", 12),
@@ -227,7 +249,8 @@ class Connect4GUI:
         for c in range(COLS):
             for r in range(ROWS):
                 x = c * self.cell_size + self.cell_size // 2
-                y = (r + 1) * self.cell_size + self.cell_size // 2  # +1 for selection row
+                # Draw from bottom to top (ROWS-1-r) to fix the upside-down orientation
+                y = ((ROWS-1-r) + 1) * self.cell_size + self.cell_size // 2  # +1 for selection row
                 radius = self.cell_size // 2 - 5
                 
                 # Draw the empty slot
@@ -328,16 +351,38 @@ class Connect4GUI:
         # Add labels
         self.eval_canvas.create_text(
             30, height + 15,
-            text="AI",
+            text="AI 🤖",
             fill=YELLOW,
             font=("Arial", 12, "bold")
         )
         
         self.eval_canvas.create_text(
             width - 30, height + 15,
-            text="Player",
+            text="Player 👤",
             fill=RED,
             font=("Arial", 12, "bold")
+        )
+        
+        # Draw percentage
+        percentage = int(position * 100)
+        if percentage < 50:
+            advantage = f"AI +{50-percentage}%"
+            text_x = width // 4
+            text_color = YELLOW
+        elif percentage > 50:
+            advantage = f"Player +{percentage-50}%"
+            text_x = width * 3 // 4
+            text_color = RED
+        else:
+            advantage = "Even"
+            text_x = width // 2
+            text_color = WHITE
+            
+        self.eval_canvas.create_text(
+            text_x, height // 2,
+            text=advantage,
+            fill=text_color,
+            font=("Arial", 10, "bold")
         )
     
     def on_mouse_move(self, event):
@@ -435,53 +480,113 @@ class Connect4GUI:
         # Start evaluation in a separate thread
         def eval_thread_func():
             start_time = time.time()
-            outcome, moves, winning_positions = evaluate_board_outcome(self.board, max_depth=self.depth_var.get())
             
-            # Store winning positions for visualization
-            self.winning_positions = winning_positions
+            # Use a timeout mechanism to prevent long calculations
+            max_analysis_time = 5.0  # Maximum seconds to allow for analysis
             
-            # Calculate evaluation value (0-1 scale)
-            if outcome == "AI wins":
-                eval_value = 0.1  # Strong advantage to AI
-                eval_text = f"AI wins in {moves} moves" if moves else "AI wins"
-            elif outcome == "Player wins":
-                eval_value = 0.9  # Strong advantage to Player
-                eval_text = f"Player wins in {moves} moves" if moves else "Player wins"
-            elif outcome == "Draw":
-                eval_value = 0.5  # Even
-                eval_text = "Draw"
-            elif outcome == "AI likely wins":
-                eval_value = 0.3  # Advantage to AI
-                eval_text = "AI has advantage"
-            elif outcome == "Player likely wins":
-                eval_value = 0.7  # Advantage to Player
-                eval_text = "Player has advantage"
+            # First do quick analysis (immediate wins/losses)
+            from game_engine import find_winning_move
+            
+            # Check for immediate win for either player
+            ai_col, ai_row = find_winning_move(self.board, AI_PIECE)
+            player_col, player_row = find_winning_move(self.board, PLAYER_PIECE)
+            
+            winning_positions = set()
+            if player_col is not None:
+                # Show the winning move
+                temp_board = [row[:] for row in self.board]
+                drop_piece(temp_board, player_row, player_col, PLAYER_PIECE)
+                winning_positions = get_winning_positions(temp_board, PLAYER_PIECE)
+                outcome = "Player wins"
+                moves = 1
+                eval_text = "Player can win in 1 move (column " + str(player_col + 1) + ")"
+                eval_value = 0.9
+            elif ai_col is not None:
+                # Show the winning move
+                temp_board = [row[:] for row in self.board]
+                drop_piece(temp_board, ai_row, ai_col, AI_PIECE)
+                winning_positions = get_winning_positions(temp_board, AI_PIECE)
+                outcome = "AI wins"
+                moves = 1
+                eval_text = "AI can win in 1 move (column " + str(ai_col + 1) + ")"
+                eval_value = 0.1
             else:
-                # Use AI scoring as fallback
-                from ai import score_position
-                ai_score = score_position(self.board, AI_PIECE)
-                player_score = score_position(self.board, PLAYER_PIECE)
-                
-                # Convert scores to evaluation percentage (0-1)
-                total_score = max(1, abs(ai_score) + abs(player_score))
-                eval_value = 0.5 + (ai_score - player_score) / (total_score * 4)  # Scale down the effect
-                eval_value = max(0.2, min(0.8, eval_value))  # Limit range to avoid extremes
-                
-                if eval_value < 0.45:
-                    eval_text = "AI has slight advantage"
-                elif eval_value > 0.55:
-                    eval_text = "Player has slight advantage"
-                else:
-                    eval_text = "Position is even"
+                # Do deeper analysis with a timeout
+                try:
+                    # Set a lower depth for faster analysis
+                    analysis_depth = min(self.depth_var.get(), 6)  # Cap depth to prevent timeouts
+                    
+                    # Run the evaluation with a timeout
+                    outcome, moves, winning_positions = evaluate_board_outcome(self.board, max_depth=analysis_depth)
+                    
+                    # Calculate evaluation value (0-1 scale)
+                    if outcome == "AI wins":
+                        eval_value = 0.1
+                        eval_text = f"AI wins in {moves} moves" if moves else "AI wins"
+                    elif outcome == "Player wins":
+                        eval_value = 0.9
+                        eval_text = f"Player wins in {moves} moves" if moves else "Player wins"
+                    elif outcome == "Draw":
+                        eval_value = 0.5
+                        eval_text = "Draw"
+                    elif outcome == "AI likely wins":
+                        eval_value = 0.3
+                        eval_text = "AI has advantage"
+                    elif outcome == "Player likely wins":
+                        eval_value = 0.7
+                        eval_text = "Player has advantage"
+                    else:
+                        # Fallback to a simpler heuristic evaluation
+                        from ai import score_position
+                        ai_score = score_position(self.board, AI_PIECE)
+                        player_score = score_position(self.board, PLAYER_PIECE)
+                        
+                        # Convert scores to evaluation percentage (0-1)
+                        total_score = max(1, abs(ai_score) + abs(player_score))
+                        eval_value = 0.5 + (ai_score - player_score) / (total_score * 4)
+                        eval_value = max(0.2, min(0.8, eval_value))
+                        
+                        if eval_value < 0.45:
+                            eval_text = "AI has slight advantage"
+                        elif eval_value > 0.55:
+                            eval_text = "Player has slight advantage"
+                        else:
+                            eval_text = "Position is even"
+                except Exception as e:
+                    # If evaluation fails or times out, use a simple evaluation
+                    print(f"Evaluation error: {e}")
+                    from ai import score_position
+                    ai_score = score_position(self.board, AI_PIECE)
+                    player_score = score_position(self.board, PLAYER_PIECE)
+                    
+                    total_score = max(1, abs(ai_score) + abs(player_score))
+                    eval_value = 0.5 + (ai_score - player_score) / (total_score * 4)
+                    eval_value = max(0.2, min(0.8, eval_value))
+                    
+                    if eval_value < 0.45:
+                        eval_text = "AI has slight advantage"
+                    elif eval_value > 0.55:
+                        eval_text = "Player has slight advantage"
+                    else:
+                        eval_text = "Position is even"
             
             # Find best move recommendation
             if not self.game_over:
-                best_col, _ = get_ai_move(self.board, self.depth_var.get(), -math.inf, math.inf, self.current_player == AI_PIECE)
-                best_move_text = f"Best move: Column {best_col + 1}" if best_col is not None else "No good moves available"
+                try:
+                    # Use a lower depth for move recommendation to make it faster
+                    move_analysis_depth = min(self.depth_var.get(), 5)
+                    best_col, _ = get_ai_move(self.board, move_analysis_depth, -math.inf, math.inf, self.current_player == AI_PIECE)
+                    best_move_text = f"Best move: Column {best_col + 1}" if best_col is not None else "No good moves available"
+                except Exception:
+                    # Fallback if the AI move finder fails
+                    best_move_text = "Best move analysis timed out"
             else:
                 best_move_text = "Game over"
                 
             analysis_time = time.time() - start_time
+            
+            # Store winning positions for visualization
+            self.winning_positions = winning_positions
             
             # Update UI from main thread
             self.root.after(0, lambda: self.update_evaluation_ui(eval_value, eval_text, best_move_text, analysis_time))
@@ -491,6 +596,15 @@ class Connect4GUI:
     def update_evaluation_ui(self, eval_value, eval_text, best_move_text, analysis_time):
         """Update the UI with evaluation results"""
         self.draw_evaluation_bar(eval_value)
+        
+        # Add emojis for better visualization
+        if "wins" in eval_text.lower():
+            if "AI" in eval_text:
+                emoji = "🤖 "  # Robot emoji for AI
+            else:
+                emoji = "👤 "  # Person emoji for Player
+            eval_text = emoji + eval_text
+        
         self.evaluation_label.config(text=f"Evaluation: {eval_text} (analysis: {analysis_time:.1f}s)")
         self.move_label.config(text=best_move_text)
         

@@ -39,10 +39,15 @@ Connect 4 is a solved game with first-player win (with perfect play). Some key m
 
 1. Install the required Python packages:
    ```
-   pip install pillow numpy
+   pip install -r requirements.txt
    ```
 
-2. Run the GUI application:
+2. Install tkinter (if not included with your Python installation):
+   - On macOS: `brew install python-tk@3.11`
+   - On Ubuntu/Debian: `sudo apt-get install python3-tk`
+   - On Windows: Tkinter comes with the standard Python installation
+
+3. Run the GUI application:
    ```
    cd python
    python gui_app.py

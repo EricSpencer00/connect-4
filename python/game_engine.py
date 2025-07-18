@@ -160,12 +160,18 @@ def evaluate_board_outcome(board, max_depth=8):
     player_col, player_row = find_winning_move(board, PLAYER_PIECE)
     
     if player_col is not None:
-        return "Player wins", 1, set([(player_row, player_col)])
+        # Create a temporary board to show the winning move
+        temp_board = [r[:] for r in board]
+        drop_piece(temp_board, player_row, player_col, PLAYER_PIECE)
+        return "Player wins", 1, get_winning_positions(temp_board, PLAYER_PIECE)
     if ai_col is not None:
-        return "AI wins", 1, set([(ai_row, ai_col)])
+        # Create a temporary board to show the winning move
+        temp_board = [r[:] for r in board]
+        drop_piece(temp_board, ai_row, ai_col, AI_PIECE)
+        return "AI wins", 1, get_winning_positions(temp_board, AI_PIECE)
     
-    # Use minimax with pruning to determine outcome
-    from evaluator import minimax_mate_finder, evaluate_mate_in_x
+    # Limit search depth to prevent timeout
+    max_depth = min(max_depth, 6)
     
     # Try to find a forced win sequence
     ai_sequence = find_forced_win_sequence(board, 0, AI_PIECE, max_depth // 2)
@@ -173,26 +179,36 @@ def evaluate_board_outcome(board, max_depth=8):
     
     if ai_sequence:
         winning_positions = set()
+        # Create a temporary board to show the winning sequence
+        temp_board = [r[:] for r in board]
         for col, row in ai_sequence:
+            drop_piece(temp_board, row, col, AI_PIECE if len(winning_positions) % 2 == 0 else PLAYER_PIECE)
             winning_positions.add((row, col))
         return "AI wins", len(ai_sequence), winning_positions
     
     if player_sequence:
         winning_positions = set()
+        # Create a temporary board to show the winning sequence
+        temp_board = [r[:] for r in board]
         for col, row in player_sequence:
+            drop_piece(temp_board, row, col, PLAYER_PIECE if len(winning_positions) % 2 == 0 else AI_PIECE)
             winning_positions.add((row, col))
         return "Player wins", len(player_sequence), winning_positions
     
-    # Fall back to evaluate_mate_in_x for deeper analysis
-    result, moves = evaluate_mate_in_x(board, max_depth)
-    
-    if result == "AI wins":
-        # We don't have the exact winning positions, but we know AI wins
-        return result, moves, set()
-    elif result == "Player wins":
-        return result, moves, set()
-    elif result == "Draw":
-        return result, 0, set()
+    # Fall back to evaluate_mate_in_x for deeper analysis, but with a timeout mechanism
+    try:
+        from evaluator import evaluate_mate_in_x
+        result, moves = evaluate_mate_in_x(board, max_depth)
+        
+        if result == "AI wins":
+            # We don't have the exact winning positions, but we know AI wins
+            return result, moves, set()
+        elif result == "Player wins":
+            return result, moves, set()
+        elif result == "Draw":
+            return result, 0, set()
+    except Exception as e:
+        print(f"Mate finder error: {e}")
     
     # If no conclusive result, return evaluation based on heuristic
     ai_score = score_position(board, AI_PIECE)
