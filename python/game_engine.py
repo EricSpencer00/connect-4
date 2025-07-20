@@ -7,7 +7,11 @@ import math
 import copy
 import random
 import time
+import logging
 from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece, is_valid_location
+
+# Configure logging
+logger = logging.getLogger('connect4_analyzer')
 
 def get_valid_locations(board):
     """Gets a list of valid columns to move."""
@@ -74,57 +78,76 @@ def find_forced_win_sequence(board, depth, piece, max_depth=10):
     Find a sequence of moves that forces a win for the given piece.
     Returns a list of moves (column, row) that leads to a win, or empty list if no forced win.
     """
+    logger.debug(f"find_forced_win_sequence: depth={depth}, piece={piece}, max_depth={max_depth}")
+    
     if depth > max_depth:
+        logger.debug(f"Max depth {max_depth} reached, stopping search")
         return []
     
     # If it's a win already, return empty list (base case - already won)
     if winning_move(board, piece):
+        logger.debug(f"Player {piece} already won")
         return []
     
     # If it's a terminal position without a win, no forced win exists
     if is_terminal_node(board) or len(get_valid_locations(board)) == 0:
+        logger.debug("Terminal node without win, no forced win")
         return []
     
     # Check for immediate win
     winning_col, winning_row = find_winning_move(board, piece)
     if winning_col is not None:
+        logger.debug(f"Immediate win found at column {winning_col+1}")
         return [(winning_col, winning_row)]
     
     # If it's player's turn (piece), try each move and see if it leads to a forced win
     opponent_piece = AI_PIECE if piece == PLAYER_PIECE else PLAYER_PIECE
+    player_name = "RED" if piece == PLAYER_PIECE else "YELLOW"
     
+    logger.debug(f"{player_name} checking for forced wins...")
     for col in get_valid_locations(board):
         row = get_next_open_row(board, col)
         if row is not None:
             # Make the move
             board_copy = [r[:] for r in board]
             drop_piece(board_copy, row, col, piece)
+            logger.debug(f"{player_name} trying column {col+1}")
             
             # For each opponent response, check if we can force a win
             all_opponent_moves_lead_to_win = True
             winning_sequence = []
             
-            for opp_col in get_valid_locations(board_copy):
+            opponent_name = "YELLOW" if piece == PLAYER_PIECE else "RED"
+            opponent_valid_moves = get_valid_locations(board_copy)
+            logger.debug(f"{opponent_name} has {len(opponent_valid_moves)} possible responses")
+            
+            for opp_col in opponent_valid_moves:
                 opp_row = get_next_open_row(board_copy, opp_col)
                 if opp_row is not None:
                     # Make opponent's move
                     opp_board = [r[:] for r in board_copy]
                     drop_piece(opp_board, opp_row, opp_col, opponent_piece)
+                    logger.debug(f"{opponent_name} responds with column {opp_col+1}")
                     
                     # Check if we can still force a win
                     next_sequence = find_forced_win_sequence(opp_board, depth + 1, piece, max_depth)
                     
                     if not next_sequence:  # If any opponent move prevents a forced win
+                        logger.debug(f"{opponent_name} can prevent forced win by playing column {opp_col+1}")
                         all_opponent_moves_lead_to_win = False
                         break
                     
                     if not winning_sequence or len(next_sequence) < len(winning_sequence):
                         winning_sequence = next_sequence
+                        logger.debug(f"Found shorter winning sequence of length {len(next_sequence)}")
             
             if all_opponent_moves_lead_to_win and winning_sequence:
-                return [(col, row)] + winning_sequence
+                full_sequence = [(col, row)] + winning_sequence
+                logger.debug(f"Forced win found for {player_name} in {len(full_sequence)} moves")
+                return full_sequence
     
     # No forced win found
+    logger.debug(f"No forced win found for {player_name}")
     return []
 
 def score_position(board, piece):
@@ -147,12 +170,17 @@ def evaluate_board_outcome(board, max_depth=8):
         moves: number of moves to reach the outcome, or None if undetermined
         winning_positions: set of (row, col) tuples of the winning line, or empty set
     """
+    logger.info(f"evaluate_board_outcome: max_depth={max_depth}")
+    
     # Check if game is already over
     if winning_move(board, PLAYER_PIECE):
+        logger.info("Game already won by RED")
         return "Player wins", 0, get_winning_positions(board, PLAYER_PIECE)
     if winning_move(board, AI_PIECE):
+        logger.info("Game already won by YELLOW")
         return "AI wins", 0, get_winning_positions(board, AI_PIECE)
     if len(get_valid_locations(board)) == 0:
+        logger.info("Board is full - draw")
         return "Draw", 0, set()
     
     # Check for immediate win for either player
@@ -161,44 +189,61 @@ def evaluate_board_outcome(board, max_depth=8):
     
     if player_col is not None:
         # Create a temporary board to show the winning move
+        logger.info(f"RED has immediate win in column {player_col+1}")
         temp_board = [r[:] for r in board]
         drop_piece(temp_board, player_row, player_col, PLAYER_PIECE)
         return "Player wins", 1, get_winning_positions(temp_board, PLAYER_PIECE)
     if ai_col is not None:
         # Create a temporary board to show the winning move
+        logger.info(f"YELLOW has immediate win in column {ai_col+1}")
         temp_board = [r[:] for r in board]
         drop_piece(temp_board, ai_row, ai_col, AI_PIECE)
         return "AI wins", 1, get_winning_positions(temp_board, AI_PIECE)
     
     # Limit search depth to prevent timeout
     max_depth = min(max_depth, 6)
+    logger.info(f"Searching for forced win sequences with max_depth={max_depth}")
     
     # Try to find a forced win sequence
+    logger.info("Checking for YELLOW forced win sequence")
     ai_sequence = find_forced_win_sequence(board, 0, AI_PIECE, max_depth // 2)
+    logger.info(f"YELLOW forced win sequence result: {len(ai_sequence) > 0}, length: {len(ai_sequence)}")
+    
+    logger.info("Checking for RED forced win sequence")
     player_sequence = find_forced_win_sequence(board, 0, PLAYER_PIECE, max_depth // 2)
+    logger.info(f"RED forced win sequence result: {len(player_sequence) > 0}, length: {len(player_sequence)}")
     
     if ai_sequence:
         winning_positions = set()
         # Create a temporary board to show the winning sequence
         temp_board = [r[:] for r in board]
-        for col, row in ai_sequence:
-            drop_piece(temp_board, row, col, AI_PIECE if len(winning_positions) % 2 == 0 else PLAYER_PIECE)
+        logger.info(f"YELLOW has forced win in {len(ai_sequence)} moves")
+        for i, (col, row) in enumerate(ai_sequence):
+            current_piece = AI_PIECE if i % 2 == 0 else PLAYER_PIECE
+            drop_piece(temp_board, row, col, current_piece)
             winning_positions.add((row, col))
+            logger.debug(f"Move {i+1}: {'YELLOW' if current_piece == AI_PIECE else 'RED'} at column {col+1}")
         return "AI wins", len(ai_sequence), winning_positions
     
     if player_sequence:
         winning_positions = set()
         # Create a temporary board to show the winning sequence
         temp_board = [r[:] for r in board]
-        for col, row in player_sequence:
-            drop_piece(temp_board, row, col, PLAYER_PIECE if len(winning_positions) % 2 == 0 else AI_PIECE)
+        logger.info(f"RED has forced win in {len(player_sequence)} moves")
+        for i, (col, row) in enumerate(player_sequence):
+            current_piece = PLAYER_PIECE if i % 2 == 0 else AI_PIECE
+            drop_piece(temp_board, row, col, current_piece)
             winning_positions.add((row, col))
+            logger.debug(f"Move {i+1}: {'RED' if current_piece == PLAYER_PIECE else 'YELLOW'} at column {col+1}")
         return "Player wins", len(player_sequence), winning_positions
     
     # Fall back to evaluate_mate_in_x for deeper analysis, but with a timeout mechanism
+    logger.info("No forced win sequence found, using mate finder")
     try:
         from evaluator import evaluate_mate_in_x
+        logger.info(f"Calling evaluate_mate_in_x with max_depth={max_depth}")
         result, moves = evaluate_mate_in_x(board, max_depth)
+        logger.info(f"Mate finder result: {result}, moves: {moves}")
         
         if result == "AI wins":
             # We don't have the exact winning positions, but we know AI wins
@@ -208,15 +253,20 @@ def evaluate_board_outcome(board, max_depth=8):
         elif result == "Draw":
             return result, 0, set()
     except Exception as e:
-        print(f"Mate finder error: {e}")
+        logger.error(f"Mate finder error: {e}")
     
     # If no conclusive result, return evaluation based on heuristic
+    logger.info("No forced outcome found, using heuristic evaluation")
     ai_score = score_position(board, AI_PIECE)
     player_score = score_position(board, PLAYER_PIECE)
+    logger.info(f"Heuristic scores - RED: {player_score}, YELLOW: {ai_score}")
     
     if ai_score > player_score + 20:  # Significant advantage
+        logger.info("YELLOW has significant advantage")
         return "AI likely wins", None, set()
     elif player_score > ai_score + 20:
+        logger.info("RED has significant advantage")
         return "Player likely wins", None, set()
     else:
+        logger.info("Position is roughly equal")
         return "Undetermined", None, set()

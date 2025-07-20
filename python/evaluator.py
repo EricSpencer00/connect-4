@@ -1,7 +1,11 @@
 import math
 import copy
 import random
+import logging
 from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece, is_valid_location
+
+# Configure logging
+logger = logging.getLogger('connect4_analyzer')
 
 def get_valid_locations(board):
     """Gets a list of valid columns to move."""

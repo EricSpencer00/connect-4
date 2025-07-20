@@ -9,7 +9,18 @@ import threading
 import time
 import math
 import numpy as np
+import logging
 from PIL import Image, ImageTk
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('connect4_analyzer')
 
 from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
 from ai import score_position, get_ai_move
@@ -666,14 +677,18 @@ class Connect4Analyzer:
         
         # Get the analysis depth
         depth = self.depth_var.get()
+        logger.info(f"Starting analysis with depth {depth}")
         
         try:
             # Check for immediate win for either player
             player_col, player_row = find_winning_move(self.board, PLAYER_PIECE)
             ai_col, ai_row = find_winning_move(self.board, AI_PIECE)
             
+            logger.info(f"Immediate win check - RED: {player_col is not None}, YELLOW: {ai_col is not None}")
+            
             # Use the current player to determine who's turn it is
             current_text = "RED" if self.current_player == PLAYER_PIECE else "YELLOW"
+            logger.info(f"Current player: {current_text}")
             
             # Initialize variables
             outcome = None
@@ -697,6 +712,7 @@ class Connect4Analyzer:
                 score_text = "Score: +∞"
                 win_prob_text = "Win probability: 100%"
                 mate_text = "Mate in 1"
+                logger.info(f"RED has immediate win in column {player_col+1}")
             elif self.current_player == AI_PIECE and ai_col is not None:
                 temp_board = [r[:] for r in self.board]
                 drop_piece(temp_board, ai_row, ai_col, AI_PIECE)
@@ -708,34 +724,43 @@ class Connect4Analyzer:
                 score_text = "Score: -∞"
                 win_prob_text = "Win probability: 0%"
                 mate_text = "Mate in 1"
+                logger.info(f"YELLOW has immediate win in column {ai_col+1}")
             elif self.current_player == PLAYER_PIECE and ai_col is not None:
                 # Yellow has a win, but it's Red's turn - need to block
                 eval_value = 0.3
                 eval_text = "YELLOW threatens to win - RED must block"
                 score_text = "Score: -5.0"
                 win_prob_text = "Win probability: 30%"
+                logger.info(f"YELLOW threatens to win - RED must block in column {ai_col+1}")
             elif self.current_player == AI_PIECE and player_col is not None:
                 # Red has a win, but it's Yellow's turn - need to block
                 eval_value = 0.7
                 eval_text = "RED threatens to win - YELLOW must block"
                 score_text = "Score: +5.0"
                 win_prob_text = "Win probability: 70%"
+                logger.info(f"RED threatens to win - YELLOW must block in column {player_col+1}")
             else:
                 # Do deeper analysis
+                logger.info("No immediate wins found, performing deeper analysis")
                 try:
                     # Use evaluate_board_outcome for complete analysis
+                    logger.info(f"Calling evaluate_board_outcome with depth {depth}")
                     outcome, moves, positions = evaluate_board_outcome(self.board, max_depth=depth)
                     winning_positions = positions
+                    logger.info(f"evaluate_board_outcome result: {outcome}, moves: {moves}, positions: {len(positions)}")
                     
                     # If no conclusive result, try the mate finder
                     if outcome == "Undetermined" and depth >= 7:
                         try:
+                            logger.info(f"Calling evaluate_mate_in_x with depth {depth}")
                             result, mate_moves = evaluate_mate_in_x(self.board, max_depth=depth)
+                            logger.info(f"evaluate_mate_in_x result: {result}, moves: {mate_moves}")
                             if result and mate_moves:
                                 outcome = result
                                 moves = mate_moves
+                                logger.info(f"Mate found: {outcome} in {moves} moves")
                         except Exception as e:
-                            print(f"Mate finder error: {e}")
+                            logger.error(f"Mate finder error: {e}")
                     
                     # Set evaluation text and value based on outcome
                     if outcome == "AI wins" or outcome == "YELLOW wins":
@@ -745,6 +770,7 @@ class Connect4Analyzer:
                         win_prob = max(0, 10 - moves * 2) if moves else 0
                         win_prob_text = f"Win probability: {win_prob}%"
                         mate_text = f"Mate in {moves}" if moves else "Checkmate"
+                        logger.info(f"YELLOW wins in {moves} moves")
                     elif outcome == "Player wins" or outcome == "RED wins":
                         eval_value = 0.9
                         eval_text = f"RED wins in {moves} moves" if moves else "RED wins"
@@ -752,26 +778,33 @@ class Connect4Analyzer:
                         win_prob = min(100, 90 + moves * 1) if moves else 100
                         win_prob_text = f"Win probability: {win_prob}%"
                         mate_text = f"Mate in {moves}" if moves else "Checkmate"
+                        logger.info(f"RED wins in {moves} moves")
                     elif outcome == "Draw":
                         eval_value = 0.5
                         eval_text = "Position is drawn"
                         score_text = "Score: 0.0"
                         win_prob_text = "Win probability: 50%"
+                        logger.info("Position is drawn")
                     elif outcome == "AI likely wins" or outcome == "YELLOW likely wins":
                         eval_value = 0.3
                         eval_text = "YELLOW has a significant advantage"
                         score_text = "Score: -3.0"
                         win_prob_text = "Win probability: 30%"
+                        logger.info("YELLOW has a significant advantage")
                     elif outcome == "Player likely wins" or outcome == "RED likely wins":
                         eval_value = 0.7
                         eval_text = "RED has a significant advantage"
                         score_text = "Score: +3.0"
                         win_prob_text = "Win probability: 70%"
+                        logger.info("RED has a significant advantage")
                     else:
                         # Use heuristic scoring
+                        logger.info("No definitive outcome, using heuristic scoring")
                         ai_score = score_position(self.board, AI_PIECE)
                         player_score = score_position(self.board, PLAYER_PIECE)
                         score_diff = player_score - ai_score
+                        
+                        logger.info(f"Heuristic scores - RED: {player_score}, YELLOW: {ai_score}, diff: {score_diff}")
                         
                         # Convert to evaluation scale (0-1)
                         eval_value = 0.5 + score_diff / 100
