@@ -11,19 +11,19 @@ import numpy as np
 import math
 from PIL import Image, ImageTk
 
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
-from ai import get_ai_move
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
+from python.ai import get_ai_move
 
 # Try to import the dataset-based AI
 try:
-    from dataset_ai import get_dataset_ai_move
+    from python.dataset_ai import get_dataset_ai_move
     DATASET_AI_AVAILABLE = True
     print("Dataset-based AI loaded successfully")
 except Exception as e:
     print(f"Warning: Could not load dataset AI: {e}")
     DATASET_AI_AVAILABLE = False
 
-from game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions
+from python.game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions
 
 # Colors
 BLUE = "#0080FF"
@@ -535,7 +535,7 @@ class Connect4GUI:
             max_analysis_time = 5.0  # Maximum seconds to allow for analysis
             
             # First do quick analysis (immediate wins/losses)
-            from game_engine import find_winning_move
+            from python.game_engine import find_winning_move
             
             # Check for immediate win for either player
             ai_col, ai_row = find_winning_move(self.board, AI_PIECE)
@@ -605,7 +605,7 @@ class Connect4GUI:
                 except Exception as e:
                     # If evaluation fails or times out, use a simple evaluation
                     print(f"Evaluation error: {e}")
-                    from ai import score_position
+                    from python.ai import score_position
                     ai_score = score_position(self.board, AI_PIECE)
                     player_score = score_position(self.board, PLAYER_PIECE)
                     

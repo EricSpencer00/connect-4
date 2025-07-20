@@ -6,8 +6,9 @@ This script demonstrates the Connect 4 game using the dataset-based AI.
 import time
 import random
 import math
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, drop_piece, is_valid_location, get_next_open_row, winning_move, print_board
-from ai import get_ai_move
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, drop_piece, is_valid_location, get_next_open_row, winning_move, print_board
+from python.ai import get_ai_move
+from python.dataset_ai import get_dataset_ai_move
 
 def play_connect4():
     """Play a game of Connect 4 against the dataset-based AI."""
@@ -42,7 +43,14 @@ def play_connect4():
         else:  # AI's turn
             print("AI is thinking...")
             start_time = time.time()
-            col, score = get_ai_move(board, 5, -math.inf, math.inf, True)
+            
+            # Use the dataset-based AI
+            try:
+                col, score = get_dataset_ai_move(board)
+            except Exception as e:
+                print(f"Error using dataset AI: {e}. Falling back to minimax.")
+                col, score = get_ai_move(board, 5, -math.inf, math.inf, True)
+                
             end_time = time.time()
             
             if col is not None and is_valid_location(board, col):

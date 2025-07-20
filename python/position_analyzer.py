@@ -22,10 +22,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger('connect4_analyzer')
 
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
-from ai import score_position, get_ai_move
-from game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions, find_winning_move
-from evaluator import evaluate_mate_in_x
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
+from python.ai import score_position, get_ai_move
+from python.game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions, find_winning_move
+from python.evaluator import evaluate_mate_in_x
 
 # Colors
 BLUE = "#0080FF"

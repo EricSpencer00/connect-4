@@ -6,7 +6,7 @@ This module provides AI decision making based on the Connect-4 dataset.
 import os
 import gzip
 import numpy as np
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
 
 # Constants for dataset mapping
 X_MARKER = 'x'

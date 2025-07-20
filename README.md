@@ -29,6 +29,8 @@ This implementation includes a dataset-based AI option that uses John Tromp's Co
 
 - **Position Analysis**: Analyze any Connect 4 position to determine the expected outcome with perfect play
 - **Win Probability**: Get probability estimates for each player based on the current position
+- **Solved Mode**: Play against a perfect AI that uses dataset-based decision making
+- **Best Move Finder**: Identifies the strongest move in any position
 - **Evaluation Bar**: Visual representation of advantage similar to chess engines
 - **Mate Detection**: Find "mate in X" sequences and forced wins
 - **Best Moves Ranking**: View a ranked list of best moves for the current position
@@ -92,7 +94,7 @@ To play Connect 4 with the AI, you have several options:
    ```
    python play_solved_connect4.py
    ```
-   This launches the game with the "Solved Mode" option enabled by default.
+   This launches the game with the "Solved Mode" option enabled by default, which makes the AI use the John Tromp dataset for optimal moves. For more information on Solved Mode, see [SOLVED_MODE_GUIDE.md](SOLVED_MODE_GUIDE.md).
 
 ### Analyzing Positions
 

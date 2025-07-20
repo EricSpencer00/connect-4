@@ -1,11 +1,11 @@
 import random
 import math
 import os
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
 
 # Import the dataset-based AI
 try:
-    from dataset_ai import get_dataset_ai_move
+    from python.dataset_ai import get_dataset_ai_move
     DATASET_AI_AVAILABLE = True
     print("Dataset-based AI loaded successfully")
 except Exception as e:
