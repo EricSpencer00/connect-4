@@ -23,6 +23,7 @@ This implementation includes a dataset-based AI option that uses John Tromp's Co
 - Contains 67,557 unique, legal 8-ply positions
 - Each position is labeled with the game-theoretic outcome (win, loss, or draw) with perfect play
 - Dataset distribution: 44,473 wins (65.83%), 16,635 losses (24.62%), 6,449 draws (9.55%)
+- This dataset allows the AI to play "perfect" Connect 4 in the "Solved Mode"
 
 ## Features
 
@@ -32,6 +33,7 @@ This implementation includes a dataset-based AI option that uses John Tromp's Co
 - **Mate Detection**: Find "mate in X" sequences and forced wins
 - **Best Moves Ranking**: View a ranked list of best moves for the current position
 - **Game Mode**: Option to play against the AI with adjustable difficulty
+- **Solved Mode**: Play against a perfect AI that uses the pre-solved Connect 4 dataset
 
 ## Structure
 
@@ -85,6 +87,12 @@ To play Connect 4 with the AI, you have several options:
    ```
    python play_connect4.py --ai minimax --depth 7
    ```
+
+4. Play with the Solved Mode (perfect play) directly:
+   ```
+   python play_solved_connect4.py
+   ```
+   This launches the game with the "Solved Mode" option enabled by default.
 
 ### Analyzing Positions
 

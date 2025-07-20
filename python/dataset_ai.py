@@ -23,6 +23,9 @@ CLASS_INDEX = 42  # The index of the class (win/loss/draw) in the dataset entrie
 # Global variable to store the dataset
 dataset = None
 
+# Cache for board evaluations to improve performance
+position_cache = {}
+
 def load_dataset(dataset_path):
     """
     Load the Connect-4 dataset from the compressed file.
@@ -167,6 +170,11 @@ def get_best_move_from_dataset(board, player_piece):
     Returns:
         The column to play (0-6)
     """
+    # Check the cache first
+    board_key = str(board)  # Convert board to string for use as dictionary key
+    if board_key in position_cache:
+        return position_cache[board_key]
+    
     # First check for immediate win
     for col in range(COLS):
         if board[ROWS-1][col] == EMPTY:  # If column has space
@@ -246,10 +254,18 @@ def get_best_move_from_dataset(board, player_piece):
     
     # If we have valid scores, choose the best one
     if move_scores:
-        return max(move_scores.items(), key=lambda x: x[1])[0]
+        best_col = max(move_scores.items(), key=lambda x: x[1])[0]
+        # Store in cache
+        position_cache[board_key] = best_col
+        return best_col
     
     # Fallback to valid random move if no scores
-    return np.random.choice(valid_moves)
+    valid_moves = [col for col in range(COLS) if board[ROWS-1][col] == EMPTY]
+    best_col = np.random.choice(valid_moves) if valid_moves else None
+    
+    # Store in cache
+    position_cache[board_key] = best_col
+    return best_col
 
 def get_dataset_ai_move(board):
     """
