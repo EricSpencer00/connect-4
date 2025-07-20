@@ -112,13 +112,14 @@ def map_board_to_dataset_format(board):
     
     return dataset_board
 
-def find_matching_positions(board, dataset_data=None):
+def find_matching_positions(board, dataset_data=None, max_matches=100):
     """
     Find positions in the dataset that match or are similar to the current board.
     
     Args:
         board: 2D list representing the Connect 4 board
         dataset_data: Optional dataset to use instead of the global one
+        max_matches: Maximum number of matches to return (for efficiency)
     
     Returns:
         A list of tuples (similarity_score, board_state, outcome)
@@ -135,7 +136,16 @@ def find_matching_positions(board, dataset_data=None):
     current_board = map_board_to_dataset_format(board)
     matches = []
     
-    for board_state, outcome in dataset_data:
+    # Use only a subset of the dataset for efficiency
+    # We'll examine at most 5000 positions randomly
+    subset_size = min(5000, len(dataset_data))
+    if len(dataset_data) > subset_size:
+        import random
+        dataset_subset = random.sample(dataset_data, subset_size)
+    else:
+        dataset_subset = dataset_data
+    
+    for board_state, outcome in dataset_subset:
         # Calculate similarity score (number of matching positions)
         similarity = sum(1 for a, b in zip(current_board, board_state) if a == b)
         matches.append((similarity, board_state, outcome))
@@ -143,7 +153,8 @@ def find_matching_positions(board, dataset_data=None):
     # Sort by similarity (highest first)
     matches.sort(reverse=True, key=lambda x: x[0])
     
-    return matches
+    # Return only the top matches
+    return matches[:max_matches]
 
 def get_best_move_from_dataset(board, player_piece):
     """
@@ -179,65 +190,66 @@ def get_best_move_from_dataset(board, player_piece):
                 if winning_move(board_copy, opponent_piece):
                     return col
     
-    # Find matching positions in dataset
-    matches = find_matching_positions(board)
+    # Get valid moves
+    valid_moves = [col for col in range(COLS) if board[ROWS-1][col] == EMPTY]
+    
+    # If no valid moves, return None
+    if not valid_moves:
+        return None
+    
+    # Find matching positions in dataset - limit to top 50 for efficiency
+    matches = find_matching_positions(board, max_matches=50)
     
     if not matches:
         # Fallback to center or random move if no matches
-        valid_moves = [col for col in range(COLS) if board[ROWS-1][col] == EMPTY]
         # Prefer center column if available
         if COLS // 2 in valid_moves:
             return COLS // 2
-        return np.random.choice(valid_moves) if valid_moves else None
+        return np.random.choice(valid_moves)
     
-    # Analyze potential moves
-    move_scores = {col: 0 for col in range(COLS) if board[ROWS-1][col] == EMPTY}
+    # Analyze potential moves - but limit the analysis for efficiency
+    move_scores = {col: 0 for col in valid_moves}
     
-    # Use the top matches (more weight to closer matches)
-    match_weight_factor = 0.9  # Decay factor for match importance
-    match_weight = 1.0
+    # Only use top 10 matches
+    top_matches = matches[:10]
     
-    # Focus on the top 10% of matches to avoid noise
-    top_matches = matches[:max(10, len(matches) // 10)]
-    
-    for similarity, board_state, outcome in top_matches:
-        # Look at each possible move
-        for col in move_scores.keys():
-            row = get_next_open_row(board, col)
-            if row is not None:
-                # Create a new board with this move
-                new_board = [r[:] for r in board]
-                drop_piece(new_board, row, col, player_piece)
-                
-                # Find how similar this new board is to positions in the dataset
-                new_matches = find_matching_positions(new_board)
-                
-                # Score based on outcomes of similar positions - only check if we have matches
-                if new_matches and len(new_matches) > 0:
-                    for i in range(min(5, len(new_matches))):  # Look at top 5 matches (safely)
-                        new_similarity, _, new_outcome = new_matches[i]
-                        # Score based on outcome and similarity
-                        if player_piece == AI_PIECE:  # AI wants to win
-                            if new_outcome == WIN_CLASS:
-                                move_scores[col] += new_similarity * match_weight
-                            elif new_outcome == DRAW_CLASS:
-                                move_scores[col] += (new_similarity * match_weight) / 2
-                        else:  # Player wants to win
-                            if new_outcome == LOSS_CLASS:  # Loss for AI means win for player
-                                move_scores[col] += new_similarity * match_weight
-                            elif new_outcome == DRAW_CLASS:
-                                move_scores[col] += (new_similarity * match_weight) / 2
-        
-        # Reduce weight for next match
-        match_weight *= match_weight_factor
+    # Look at each possible move
+    for col in move_scores.keys():
+        row = get_next_open_row(board, col)
+        if row is not None:
+            # Create a new board with this move
+            new_board = [r[:] for r in board]
+            drop_piece(new_board, row, col, player_piece)
+            
+            # Check if the move leads to a win
+            if winning_move(new_board, player_piece):
+                move_scores[col] += 1000
+                continue
+            
+            # Find how similar this new board is to positions in the dataset
+            # Limit to just a few matches for efficiency
+            new_matches = find_matching_positions(new_board, max_matches=5)
+            
+            # Score based on outcomes of similar positions
+            for new_similarity, _, new_outcome in new_matches:
+                # Score based on outcome and similarity
+                if player_piece == AI_PIECE:  # AI wants to win
+                    if new_outcome == WIN_CLASS:
+                        move_scores[col] += new_similarity
+                    elif new_outcome == DRAW_CLASS:
+                        move_scores[col] += new_similarity / 2
+                else:  # Player wants to win
+                    if new_outcome == LOSS_CLASS:  # Loss for AI means win for player
+                        move_scores[col] += new_similarity
+                    elif new_outcome == DRAW_CLASS:
+                        move_scores[col] += new_similarity / 2
     
     # If we have valid scores, choose the best one
     if move_scores:
         return max(move_scores.items(), key=lambda x: x[1])[0]
     
     # Fallback to valid random move if no scores
-    valid_moves = [col for col in range(COLS) if board[ROWS-1][col] == EMPTY]
-    return np.random.choice(valid_moves) if valid_moves else None
+    return np.random.choice(valid_moves)
 
 def get_dataset_ai_move(board):
     """
@@ -270,18 +282,31 @@ def get_dataset_ai_move(board):
             if winning_move(board_copy, AI_PIECE):
                 score = 1000000  # High score for winning move
             else:
-                # Use number of matching winning positions as score
-                matches = find_matching_positions(board_copy)
-                win_matches = sum(1 for _, _, outcome in matches[:10] if outcome == WIN_CLASS)
-                score = win_matches * 100
+                # Simplified scoring to improve performance
+                score = 500  # Default score for non-winning moves
+                
+                # Quick check of a few positions for better estimation
+                matches = find_matching_positions(board_copy, max_matches=5)
+                if matches:
+                    win_count = sum(1 for _, _, outcome in matches if outcome == WIN_CLASS)
+                    draw_count = sum(1 for _, _, outcome in matches if outcome == DRAW_CLASS)
+                    score = win_count * 100 + draw_count * 30
     
     return best_col, score
 
 # Pre-load the dataset when module is imported
 if __name__ != "__main__":
     try:
+        print("Preparing to load Connect 4 dataset (this might take a moment)...")
         dataset_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
                                    'c4-dataset', 'connect-4.data.Z')
-        dataset = load_dataset(dataset_path)
+        # Only load a subset of the dataset for better performance
+        full_dataset = load_dataset(dataset_path)
+        if len(full_dataset) > 10000:
+            import random
+            dataset = random.sample(full_dataset, 10000)
+            print(f"Loaded 10000 positions (sample) from full dataset of {len(full_dataset)} positions")
+        else:
+            dataset = full_dataset
     except Exception as e:
         print(f"Warning: Could not pre-load dataset: {e}")
