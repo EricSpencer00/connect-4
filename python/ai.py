@@ -1,6 +1,16 @@
 import random
 import math
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
+import os
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece
+
+# Import the dataset-based AI
+try:
+    from python.dataset_ai import get_dataset_ai_move
+    DATASET_AI_AVAILABLE = True
+    print("Dataset-based AI loaded successfully")
+except Exception as e:
+    print(f"Warning: Could not load dataset AI: {e}")
+    DATASET_AI_AVAILABLE = False
 
 def evaluate_window(window, piece):
     """Evaluates a four-piece window."""
@@ -96,7 +106,17 @@ def is_terminal_node(board):
     return winning_move(board, PLAYER_PIECE) or winning_move(board, AI_PIECE) or len(get_valid_locations(board)) == 0
 
 def get_ai_move(board, depth, alpha, beta, maximizingPlayer):
-    """Gets the best move for the AI using minimax with alpha-beta pruning."""
+    """Gets the best move for the AI using either dataset-based approach or minimax."""
+    # Try to use the dataset-based AI if available
+    if DATASET_AI_AVAILABLE:
+        try:
+            # Use the dataset-based approach
+            return get_dataset_ai_move(board)
+        except Exception as e:
+            print(f"Error using dataset AI: {e}. Falling back to minimax.")
+            # Fall back to minimax if there's an error
+    
+    # Minimax with alpha-beta pruning as fallback
     valid_locations = get_valid_locations(board)
     
     # Check for immediate winning moves or blocking moves before entering minimax

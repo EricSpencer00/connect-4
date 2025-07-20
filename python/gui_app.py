@@ -11,9 +11,19 @@ import numpy as np
 import math
 from PIL import Image, ImageTk
 
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
-from ai import get_ai_move
-from game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
+from python.ai import get_ai_move
+
+# Try to import the dataset-based AI
+try:
+    from python.dataset_ai import get_dataset_ai_move
+    DATASET_AI_AVAILABLE = True
+    print("Dataset-based AI loaded successfully")
+except Exception as e:
+    print(f"Warning: Could not load dataset AI: {e}")
+    DATASET_AI_AVAILABLE = False
+
+from python.game_engine import evaluate_board_outcome, get_valid_locations, get_winning_positions
 
 # Colors
 BLUE = "#0080FF"
@@ -153,6 +163,23 @@ class Connect4GUI:
             font=("Arial", 12)
         )
         self.depth_dropdown.pack(side=tk.LEFT, padx=5, pady=10)
+        
+        # Solved mode checkbox (dataset-based AI)
+        self.solved_mode_var = tk.BooleanVar(value=DATASET_AI_AVAILABLE)
+        self.solved_mode_check = tk.Checkbutton(
+            self.control_frame,
+            text="Solved Mode",
+            variable=self.solved_mode_var,
+            bg="#2D2D2D",
+            fg=WHITE,
+            selectcolor="#4B4B4B",
+            activebackground="#2D2D2D",
+            activeforeground=WHITE,
+            font=("Arial", 12),
+            state=tk.NORMAL if DATASET_AI_AVAILABLE else tk.DISABLED,
+            command=self.on_solved_mode_toggle
+        )
+        self.solved_mode_check.pack(side=tk.LEFT, padx=10, pady=10)
         
         # Evaluate button
         self.evaluate_btn = tk.Button(
@@ -450,12 +477,28 @@ class Connect4GUI:
             return
             
         self.ai_thinking = True
-        self.status_label.config(text="AI is thinking...")
+        
+        # Check if we're using the solved (dataset) mode
+        use_solved_mode = self.solved_mode_var.get() and DATASET_AI_AVAILABLE
+        
+        if use_solved_mode:
+            self.status_label.config(text="AI is thinking (Solved Mode)...")
+        else:
+            self.status_label.config(text="AI is thinking...")
         
         # Start AI calculation in a separate thread
         def ai_thread_func():
             depth = self.depth_var.get()
-            col, _ = get_ai_move(self.board, depth, -math.inf, math.inf, True)
+            
+            # Use dataset AI if in solved mode, otherwise use minimax
+            if use_solved_mode:
+                try:
+                    col, _ = get_dataset_ai_move(self.board)
+                except Exception as e:
+                    print(f"Error using dataset AI: {e}. Falling back to minimax.")
+                    col, _ = get_ai_move(self.board, depth, -math.inf, math.inf, True)
+            else:
+                col, _ = get_ai_move(self.board, depth, -math.inf, math.inf, True)
             
             # Update the UI from the main thread
             self.root.after(0, lambda: self.complete_ai_move(col))
@@ -469,6 +512,13 @@ class Connect4GUI:
         if col is not None and is_valid_location(self.board, col):
             self.current_player = AI_PIECE
             self.make_move(col)
+            
+            # Update status after AI move
+            if not self.game_over:
+                if self.solved_mode_var.get() and DATASET_AI_AVAILABLE:
+                    self.status_label.config(text="Current Status: Player's Turn (Solved Mode Active)")
+                else:
+                    self.status_label.config(text="Current Status: Player's Turn")
     
     def evaluate_position(self):
         """Evaluate the current board position"""
@@ -485,7 +535,7 @@ class Connect4GUI:
             max_analysis_time = 5.0  # Maximum seconds to allow for analysis
             
             # First do quick analysis (immediate wins/losses)
-            from game_engine import find_winning_move
+            from python.game_engine import find_winning_move
             
             # Check for immediate win for either player
             ai_col, ai_row = find_winning_move(self.board, AI_PIECE)
@@ -555,7 +605,7 @@ class Connect4GUI:
                 except Exception as e:
                     # If evaluation fails or times out, use a simple evaluation
                     print(f"Evaluation error: {e}")
-                    from ai import score_position
+                    from python.ai import score_position
                     ai_score = score_position(self.board, AI_PIECE)
                     player_score = score_position(self.board, PLAYER_PIECE)
                     
@@ -615,7 +665,12 @@ class Connect4GUI:
         """Start a new game"""
         self.reset_board()
         self.current_player = PLAYER_PIECE  # Player starts
-        self.status_label.config(text="Current Status: Player's Turn")
+        
+        # Update status to show if solved mode is active
+        if self.solved_mode_var.get() and DATASET_AI_AVAILABLE:
+            self.status_label.config(text="Current Status: Player's Turn (Solved Mode Active)")
+        else:
+            self.status_label.config(text="Current Status: Player's Turn")
     
     def reset_board(self):
         """Reset the game board"""
@@ -624,7 +679,42 @@ class Connect4GUI:
         self.winning_positions = set()
         self.draw_board()
         self.evaluate_position()
-        self.status_label.config(text="Current Status: Player's Turn")
+        
+        # Update status to show if solved mode is active
+        if self.solved_mode_var.get() and DATASET_AI_AVAILABLE:
+            self.status_label.config(text="Current Status: Player's Turn (Solved Mode Active)")
+        else:
+            self.status_label.config(text="Current Status: Player's Turn")
+    
+    def on_solved_mode_toggle(self):
+        """Handle toggling of the solved mode checkbox"""
+        if self.solved_mode_var.get() and not DATASET_AI_AVAILABLE:
+            messagebox.showwarning(
+                "Solved Mode Unavailable", 
+                "The dataset-based AI is not available. Please check that the dataset is properly installed."
+            )
+            self.solved_mode_var.set(False)
+            return
+        
+        # Update the status to reflect the current mode
+        if not self.game_over:
+            if self.solved_mode_var.get():
+                self.status_label.config(text="Current Status: Player's Turn (Solved Mode Active)")
+                # Show a message to the user about solved mode
+                messagebox.showinfo(
+                    "Solved Mode Activated", 
+                    "Solved Mode is now active. The AI will use the Connect 4 dataset to make optimal moves."
+                )
+            else:
+                self.status_label.config(text="Current Status: Player's Turn")
+        
+        # If we're in the middle of a game, also update the depth selector state
+        if self.solved_mode_var.get():
+            # In solved mode, the depth is not used, so disable it
+            self.depth_dropdown.configure(state="disabled")
+        else:
+            # Re-enable the depth dropdown when not in solved mode
+            self.depth_dropdown.configure(state="normal")
 
 
 if __name__ == "__main__":

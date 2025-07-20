@@ -8,7 +8,7 @@ import copy
 import random
 import time
 import logging
-from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece, is_valid_location
+from python.connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, winning_move, get_next_open_row, drop_piece, is_valid_location
 
 # Configure logging
 logger = logging.getLogger('connect4_analyzer')
@@ -189,12 +189,12 @@ def find_forced_win_sequence(board, depth, piece, max_depth=10):
 
 def score_position(board, piece):
     """Score the position for the given piece."""
-    from ai import score_position
+    from python.ai import score_position
     return score_position(board, piece)
 
 def get_best_move(board, depth, maximizing_player=True):
     """Get the best move using minimax algorithm with alpha-beta pruning."""
-    from ai import get_ai_move
+    from python.ai import get_ai_move
     column, score = get_ai_move(board, depth, -math.inf, math.inf, maximizing_player)
     return column, score
 
@@ -243,7 +243,7 @@ def evaluate_board_outcome(board, max_depth=8):
     
     # Use evaluate_mate_in_x for complete analysis first
     try:
-        from evaluator import evaluate_mate_in_x
+        from python.evaluator import evaluate_mate_in_x
         logger.info(f"Calling evaluate_mate_in_x with max_depth={max_depth}")
         result, moves, sequence = evaluate_mate_in_x(board, max_depth)
         logger.info(f"Mate finder result: {result}, moves: {moves}, sequence length: {len(sequence)}")

@@ -17,25 +17,40 @@ Connect 4 is a solved game with first-player win (with perfect play). Some key m
 - Legal positions reachable in gameplay: ~4.5 billion
 - First solved by Victor Allis (1988) and independently by John Tromp (1995)
 
+## Dataset
+
+This implementation includes a dataset-based AI option that uses John Tromp's Connect 4 dataset:
+- Contains 67,557 unique, legal 8-ply positions
+- Each position is labeled with the game-theoretic outcome (win, loss, or draw) with perfect play
+- Dataset distribution: 44,473 wins (65.83%), 16,635 losses (24.62%), 6,449 draws (9.55%)
+- This dataset allows the AI to play "perfect" Connect 4 in the "Solved Mode"
+
 ## Features
 
 - **Position Analysis**: Analyze any Connect 4 position to determine the expected outcome with perfect play
 - **Win Probability**: Get probability estimates for each player based on the current position
+- **Solved Mode**: Play against a perfect AI that uses dataset-based decision making
+- **Best Move Finder**: Identifies the strongest move in any position
 - **Evaluation Bar**: Visual representation of advantage similar to chess engines
 - **Mate Detection**: Find "mate in X" sequences and forced wins
 - **Best Moves Ranking**: View a ranked list of best moves for the current position
 - **Game Mode**: Option to play against the AI with adjustable difficulty
+- **Solved Mode**: Play against a perfect AI that uses the pre-solved Connect 4 dataset
 
 ## Structure
 
 - `connect4_analyzer.py` - Main application launcher with command-line options
+- `dataset_analyzer.py` - Tool for analyzing positions using the Connect 4 dataset
+- `play_connect4.py` - Play Connect 4 with switchable AI types (minimax or dataset)
 - `python/` - Python implementation of the Connect 4 analysis tools
   - `connect4.py` - Core game logic and rules
   - `ai.py` - AI implementation using minimax with alpha-beta pruning
+  - `dataset_ai.py` - Dataset-based AI implementation using optimal moves
   - `evaluator.py` - Position evaluation and mate detection
   - `game_engine.py` - Enhanced engine for position analysis
   - `position_analyzer.py` - Position analysis focused GUI
   - `gui_app.py` - Game-oriented graphical user interface
+  - `play_dataset_game.py` - Play Connect 4 specifically with the dataset-based AI
 
 - Additional theoretical implementations:
   - `Connect4.tla` - TLA+ specification for formal verification
@@ -49,6 +64,49 @@ Connect 4 is a solved game with first-player win (with perfect play). Some key m
    ```
 
 2. Install tkinter (if not included with your Python installation):
+   - On Ubuntu/Debian: `sudo apt-get install python3-tk`
+   - On macOS: tkinter should be included with Python from python.org or Homebrew
+   - On Windows: tkinter is included with the standard Python installation
+
+## Usage
+
+### Playing Connect 4
+
+To play Connect 4 with the AI, you have several options:
+
+1. Play with automatic AI selection (prefers dataset-based AI if available):
+   ```
+   python play_connect4.py
+   ```
+
+2. Explicitly choose the AI type:
+   ```
+   python play_connect4.py --ai minimax   # Use traditional minimax AI
+   python play_connect4.py --ai dataset   # Use dataset-based AI
+   ```
+
+3. Adjust the depth for minimax search (higher is stronger but slower):
+   ```
+   python play_connect4.py --ai minimax --depth 7
+   ```
+
+4. Play with the Solved Mode (perfect play) directly:
+   ```
+   python play_solved_connect4.py
+   ```
+   This launches the game with the "Solved Mode" option enabled by default, which makes the AI use the John Tromp dataset for optimal moves. For more information on Solved Mode, see [SOLVED_MODE_GUIDE.md](SOLVED_MODE_GUIDE.md).
+
+### Analyzing Positions
+
+1. For interactive position analysis with the dataset:
+   ```
+   python dataset_analyzer.py
+   ```
+   
+2. For full analysis with the position analyzer GUI:
+   ```
+   python connect4_analyzer.py
+   ```
    - On macOS: `brew install python-tk@3.11`
    - On Ubuntu/Debian: `sudo apt-get install python3-tk`
    - On Windows: Tkinter comes with the standard Python installation

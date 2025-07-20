@@ -64,8 +64,8 @@ def print_board(board):
     print("-" * (COLS * 2 - 1))
 
 if __name__ == '__main__':
-    from ai import get_ai_move
-    from evaluator import print_evaluation_bar
+    from python.ai import get_ai_move
+    from python.evaluator import print_evaluation_bar
 
     board = create_board()
     game_over = False
