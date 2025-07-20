@@ -105,6 +105,29 @@ def find_forced_win_sequence(board, depth, piece, max_depth=10):
     player_name = "RED" if piece == PLAYER_PIECE else "YELLOW"
     
     logger.debug(f"{player_name} checking for forced wins...")
+    
+    # First, check if opponent has an immediate win - must block it
+    opponent_win_col, opponent_win_row = find_winning_move(board, opponent_piece)
+    if opponent_win_col is not None:
+        logger.debug(f"Opponent has immediate win at column {opponent_win_col+1}, must block")
+        # Check if after blocking, we can still force a win
+        row = get_next_open_row(board, opponent_win_col)
+        if row is not None:
+            board_copy = [r[:] for r in board]
+            drop_piece(board_copy, row, opponent_win_col, piece)
+            
+            # Check for subsequent forced win
+            next_sequence = find_forced_win_sequence(board_copy, depth + 1, piece, max_depth)
+            if next_sequence:
+                logger.debug(f"After blocking, found forced win of length {len(next_sequence)}")
+                return [(opponent_win_col, row)] + next_sequence
+            else:
+                logger.debug("No forced win after blocking opponent")
+                return []
+    
+    # Try each possible move
+    best_sequence = []
+    
     for col in get_valid_locations(board):
         row = get_next_open_row(board, col)
         if row is not None:
@@ -119,6 +142,13 @@ def find_forced_win_sequence(board, depth, piece, max_depth=10):
             
             opponent_name = "YELLOW" if piece == PLAYER_PIECE else "RED"
             opponent_valid_moves = get_valid_locations(board_copy)
+            
+            # Special case: if there are no valid moves for opponent, this is a draw
+            if not opponent_valid_moves:
+                logger.debug("No valid moves for opponent - position is a draw")
+                all_opponent_moves_lead_to_win = False
+                continue
+                
             logger.debug(f"{opponent_name} has {len(opponent_valid_moves)} possible responses")
             
             for opp_col in opponent_valid_moves:
@@ -144,11 +174,18 @@ def find_forced_win_sequence(board, depth, piece, max_depth=10):
             if all_opponent_moves_lead_to_win and winning_sequence:
                 full_sequence = [(col, row)] + winning_sequence
                 logger.debug(f"Forced win found for {player_name} in {len(full_sequence)} moves")
-                return full_sequence
+                
+                # Keep track of the shortest winning sequence
+                if not best_sequence or len(full_sequence) < len(best_sequence):
+                    best_sequence = full_sequence
     
-    # No forced win found
-    logger.debug(f"No forced win found for {player_name}")
-    return []
+    # Return the best (shortest) winning sequence, or empty list if none found
+    if best_sequence:
+        logger.debug(f"Best forced win sequence for {player_name} is {len(best_sequence)} moves")
+        return best_sequence
+    else:
+        logger.debug(f"No forced win found for {player_name}")
+        return []
 
 def score_position(board, piece):
     """Score the position for the given piece."""
@@ -201,10 +238,49 @@ def evaluate_board_outcome(board, max_depth=8):
         return "AI wins", 1, get_winning_positions(temp_board, AI_PIECE)
     
     # Limit search depth to prevent timeout
-    max_depth = min(max_depth, 6)
+    max_depth = min(max_depth, 8)
     logger.info(f"Searching for forced win sequences with max_depth={max_depth}")
     
-    # Try to find a forced win sequence
+    # Use evaluate_mate_in_x for complete analysis first
+    try:
+        from evaluator import evaluate_mate_in_x
+        logger.info(f"Calling evaluate_mate_in_x with max_depth={max_depth}")
+        result, moves, sequence = evaluate_mate_in_x(board, max_depth)
+        logger.info(f"Mate finder result: {result}, moves: {moves}, sequence length: {len(sequence)}")
+        
+        if result == "AI wins" or result == "Player wins":
+            # Create a temporary board to calculate winning positions
+            temp_board = [r[:] for r in board]
+            winning_positions = set()
+            
+            # Apply the sequence to the temporary board
+            if sequence:
+                for i, (col, row, piece) in enumerate(sequence):
+                    if i >= moves * 2:  # Only include moves up to the mate
+                        break
+                    if piece == PLAYER_PIECE or piece == AI_PIECE:  # Make sure it's a valid piece
+                        drop_piece(temp_board, row, col, piece)
+                        winning_positions.add((row, col))
+            
+            # If we couldn't get winning positions from sequence, try to find them after applying moves
+            if not winning_positions and moves > 0:
+                # Find a winning move for the player who wins
+                winning_piece = PLAYER_PIECE if result == "Player wins" else AI_PIECE
+                valid_cols = get_valid_locations(temp_board)
+                for col in valid_cols:
+                    temp_row = get_next_open_row(temp_board, col)
+                    if temp_row is not None:
+                        final_board = [r[:] for r in temp_board]
+                        drop_piece(final_board, temp_row, col, winning_piece)
+                        if winning_move(final_board, winning_piece):
+                            winning_positions.update(get_winning_positions(final_board, winning_piece))
+                            break
+            
+            return result, moves, winning_positions
+    except Exception as e:
+        logger.error(f"Mate finder error: {e}")
+    
+    # Try to find a forced win sequence if mate finder didn't work
     logger.info("Checking for YELLOW forced win sequence")
     ai_sequence = find_forced_win_sequence(board, 0, AI_PIECE, max_depth // 2)
     logger.info(f"YELLOW forced win sequence result: {len(ai_sequence) > 0}, length: {len(ai_sequence)}")
@@ -236,24 +312,6 @@ def evaluate_board_outcome(board, max_depth=8):
             winning_positions.add((row, col))
             logger.debug(f"Move {i+1}: {'RED' if current_piece == PLAYER_PIECE else 'YELLOW'} at column {col+1}")
         return "Player wins", len(player_sequence), winning_positions
-    
-    # Fall back to evaluate_mate_in_x for deeper analysis, but with a timeout mechanism
-    logger.info("No forced win sequence found, using mate finder")
-    try:
-        from evaluator import evaluate_mate_in_x
-        logger.info(f"Calling evaluate_mate_in_x with max_depth={max_depth}")
-        result, moves = evaluate_mate_in_x(board, max_depth)
-        logger.info(f"Mate finder result: {result}, moves: {moves}")
-        
-        if result == "AI wins":
-            # We don't have the exact winning positions, but we know AI wins
-            return result, moves, set()
-        elif result == "Player wins":
-            return result, moves, set()
-        elif result == "Draw":
-            return result, 0, set()
-    except Exception as e:
-        logger.error(f"Mate finder error: {e}")
     
     # If no conclusive result, return evaluation based on heuristic
     logger.info("No forced outcome found, using heuristic evaluation")
