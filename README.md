@@ -1,5 +1,7 @@
 # Connect 4 Analysis Tool
 
+![c4-board.png](c4-board.png)
+
 This is a comprehensive Connect 4 position analyzer that can determine the winner from any position in a Connect 4 game. The application includes:
 
 1. **Connect 4 Position Analyzer**: A powerful engine that can predict the outcome of any Connect 4 position with perfect play.
