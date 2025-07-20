@@ -9,7 +9,18 @@ import threading
 import time
 import math
 import numpy as np
+import logging
 from PIL import Image, ImageTk
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('connect4_analyzer')
 
 from connect4 import ROWS, COLS, EMPTY, PLAYER_PIECE, AI_PIECE, create_board, is_valid_location, get_next_open_row, drop_piece, winning_move
 from ai import score_position, get_ai_move
@@ -42,6 +53,7 @@ class Connect4Analyzer:
         self.winning_positions = set()
         self.analysis_depth = 7  # Default analysis depth
         self.last_analysis_result = None
+        self.mate_sequence = {}  # Dictionary to store mate sequence positions with move numbers
         
         # Create frames
         self.create_frames()
@@ -347,6 +359,15 @@ class Connect4Analyzer:
             anchor=tk.W
         )
         self.analysis_time_label.pack(fill=tk.X, pady=5, anchor=tk.W)
+        
+        # Show detailed evaluation button
+        self.detail_btn = ttk.Button(
+            self.eval_details_frame,
+            text="Show Detailed Evaluation",
+            command=self.show_detailed_evaluation,
+            style='TButton'
+        )
+        self.detail_btn.pack(pady=10)
     
     def setup_best_moves_tab(self):
         """Set up the best moves tab in the analysis panel"""
@@ -456,9 +477,20 @@ class Connect4Analyzer:
                 
                 # Draw pieces
                 if self.board[r][c] == PLAYER_PIECE:
+                    # Check if this piece is part of a winning line
                     color = RED
                     if (r, c) in self.winning_positions:
                         color = GREEN  # Highlight winning pieces
+                        # Draw a thicker outline for winning positions
+                        self.canvas.create_oval(
+                            x - radius - 2, y - radius - 2, 
+                            x + radius + 2, y + radius + 2,
+                            fill="",
+                            outline=GREEN,
+                            width=3
+                        )
+                        
+                    # Draw the piece
                     self.canvas.create_oval(
                         x - radius, y - radius, 
                         x + radius, y + radius,
@@ -466,10 +498,41 @@ class Connect4Analyzer:
                         outline=BLACK,
                         width=1
                     )
+                    
+                    # Add move number if this is part of a forced win sequence
+                    if hasattr(self, 'mate_sequence') and (r, c) in self.mate_sequence:
+                        move_num = self.mate_sequence[(r, c)]
+                        # Draw a background for the number to make it more visible
+                        text_radius = radius // 2
+                        self.canvas.create_oval(
+                            x - text_radius, y - text_radius, 
+                            x + text_radius, y + text_radius,
+                            fill=WHITE,
+                            outline=BLACK,
+                            width=1
+                        )
+                        self.canvas.create_text(
+                            x, y,
+                            text=str(move_num),
+                            font=("Arial", 12, "bold"),
+                            fill=BLACK
+                        )
+                        
                 elif self.board[r][c] == AI_PIECE:
+                    # Check if this piece is part of a winning line
                     color = YELLOW
                     if (r, c) in self.winning_positions:
                         color = GREEN  # Highlight winning pieces
+                        # Draw a thicker outline for winning positions
+                        self.canvas.create_oval(
+                            x - radius - 2, y - radius - 2, 
+                            x + radius + 2, y + radius + 2,
+                            fill="",
+                            outline=GREEN,
+                            width=3
+                        )
+                        
+                    # Draw the piece
                     self.canvas.create_oval(
                         x - radius, y - radius, 
                         x + radius, y + radius,
@@ -477,6 +540,25 @@ class Connect4Analyzer:
                         outline=BLACK,
                         width=1
                     )
+                    
+                    # Add move number if this is part of a forced win sequence
+                    if hasattr(self, 'mate_sequence') and (r, c) in self.mate_sequence:
+                        move_num = self.mate_sequence[(r, c)]
+                        # Draw a background for the number to make it more visible
+                        text_radius = radius // 2
+                        self.canvas.create_oval(
+                            x - text_radius, y - text_radius, 
+                            x + text_radius, y + text_radius,
+                            fill=WHITE,
+                            outline=BLACK,
+                            width=1
+                        )
+                        self.canvas.create_text(
+                            x, y,
+                            text=str(move_num),
+                            font=("Arial", 12, "bold"),
+                            fill=BLACK
+                        )
     
     def draw_selection_row(self):
         """Draw the top selection row"""
@@ -504,6 +586,29 @@ class Connect4Analyzer:
                     outline=BLACK,
                     width=1
                 )
+            
+            # Indicate best move with a small arrow if we have analysis results
+            if hasattr(self, 'last_analysis_result') and self.last_analysis_result:
+                best_moves = self.last_analysis_result.get('best_moves', [])
+                if best_moves and len(best_moves) > 0:
+                    try:
+                        # Get the column number of the best move (1-indexed)
+                        best_col = int(best_moves[0].split(':')[0].strip()) - 1
+                        
+                        # If this is the best move column, draw an indicator
+                        if c == best_col:
+                            # Draw a small arrow pointing down
+                            arrow_size = radius // 2
+                            self.canvas.create_polygon(
+                                x, y + radius + 5,  # Point
+                                x - arrow_size, y - arrow_size + radius + 5,  # Left corner
+                                x + arrow_size, y - arrow_size + radius + 5,  # Right corner
+                                fill=GREEN,
+                                outline=BLACK,
+                                width=1
+                            )
+                    except (ValueError, IndexError):
+                        pass
     
     def draw_evaluation_bar(self, eval_value):
         """Draw the evaluation bar with the given value (0-1 scale)"""
@@ -666,14 +771,18 @@ class Connect4Analyzer:
         
         # Get the analysis depth
         depth = self.depth_var.get()
+        logger.info(f"Starting analysis with depth {depth}")
         
         try:
             # Check for immediate win for either player
             player_col, player_row = find_winning_move(self.board, PLAYER_PIECE)
             ai_col, ai_row = find_winning_move(self.board, AI_PIECE)
             
+            logger.info(f"Immediate win check - RED: {player_col is not None}, YELLOW: {ai_col is not None}")
+            
             # Use the current player to determine who's turn it is
             current_text = "RED" if self.current_player == PLAYER_PIECE else "YELLOW"
+            logger.info(f"Current player: {current_text}")
             
             # Initialize variables
             outcome = None
@@ -684,6 +793,7 @@ class Connect4Analyzer:
             score_text = "Score: 0.0"
             win_prob_text = "Win probability: 50%"
             mate_text = "No forced mate found"
+            self.mate_sequence = {}  # Reset mate sequence
             
             # Check for immediate wins first
             if self.current_player == PLAYER_PIECE and player_col is not None:
@@ -697,6 +807,9 @@ class Connect4Analyzer:
                 score_text = "Score: +∞"
                 win_prob_text = "Win probability: 100%"
                 mate_text = "Mate in 1"
+                # Add to mate sequence
+                self.mate_sequence[(player_row, player_col)] = 1
+                logger.info(f"RED has immediate win in column {player_col+1}")
             elif self.current_player == AI_PIECE and ai_col is not None:
                 temp_board = [r[:] for r in self.board]
                 drop_piece(temp_board, ai_row, ai_col, AI_PIECE)
@@ -708,35 +821,66 @@ class Connect4Analyzer:
                 score_text = "Score: -∞"
                 win_prob_text = "Win probability: 0%"
                 mate_text = "Mate in 1"
+                # Add to mate sequence
+                self.mate_sequence[(ai_row, ai_col)] = 1
+                logger.info(f"YELLOW has immediate win in column {ai_col+1}")
             elif self.current_player == PLAYER_PIECE and ai_col is not None:
                 # Yellow has a win, but it's Red's turn - need to block
                 eval_value = 0.3
                 eval_text = "YELLOW threatens to win - RED must block"
                 score_text = "Score: -5.0"
                 win_prob_text = "Win probability: 30%"
+                logger.info(f"YELLOW threatens to win - RED must block in column {ai_col+1}")
             elif self.current_player == AI_PIECE and player_col is not None:
                 # Red has a win, but it's Yellow's turn - need to block
                 eval_value = 0.7
                 eval_text = "RED threatens to win - YELLOW must block"
                 score_text = "Score: +5.0"
                 win_prob_text = "Win probability: 70%"
+                logger.info(f"RED threatens to win - YELLOW must block in column {player_col+1}")
             else:
                 # Do deeper analysis
+                logger.info("No immediate wins found, performing deeper analysis")
                 try:
-                    # Use evaluate_board_outcome for complete analysis
-                    outcome, moves, positions = evaluate_board_outcome(self.board, max_depth=depth)
-                    winning_positions = positions
+                    # Use evaluate_mate_in_x for complete analysis
+                    logger.info(f"Calling evaluate_mate_in_x with depth {depth}")
+                    result, mate_moves, mate_sequence = evaluate_mate_in_x(self.board, max_depth=depth)
+                    logger.info(f"evaluate_mate_in_x result: {result}, moves: {mate_moves}, sequence length: {len(mate_sequence)}")
                     
-                    # If no conclusive result, try the mate finder
-                    if outcome == "Undetermined" and depth >= 7:
-                        try:
-                            result, mate_moves = evaluate_mate_in_x(self.board, max_depth=depth)
-                            if result and mate_moves:
-                                outcome = result
-                                moves = mate_moves
-                        except Exception as e:
-                            print(f"Mate finder error: {e}")
+                    if result and mate_moves:
+                        outcome = result
+                        moves = mate_moves
+                        
+                        # Process the mate sequence to get winning positions and moves
+                        if len(mate_sequence) > 0:
+                            logger.info("Processing mate sequence")
+                            # Set up a temporary board to follow the sequence
+                            temp_board = [r[:] for r in self.board]
+                            
+                            # Track positions in the winning sequence
+                            for move_num, (col, row, piece) in enumerate(mate_sequence):
+                                # Skip moves that don't match the current player's turn pattern
+                                if (move_num % 2 == 0 and piece != self.current_player) or \
+                                   (move_num % 2 == 1 and piece == self.current_player):
+                                    continue
+                                    
+                                # Add to the winning positions and mate sequence
+                                if piece == self.current_player:
+                                    winning_positions.add((row, col))
+                                    self.mate_sequence[(row, col)] = move_num + 1
+                                    
+                                # Make the move on the temp board
+                                drop_piece(temp_board, row, col, piece)
+                            
+                            logger.info(f"Processed mate sequence, found {len(winning_positions)} winning positions and {len(self.mate_sequence)} mate sequence positions")
                     
+                    # If no conclusive result, try evaluate_board_outcome
+                    if outcome is None or outcome == "Undetermined":
+                        logger.info(f"Calling evaluate_board_outcome with depth {depth}")
+                        outcome, moves, positions = evaluate_board_outcome(self.board, max_depth=depth)
+                        winning_positions.update(positions)
+                        logger.info(f"evaluate_board_outcome result: {outcome}, moves: {moves}, positions: {len(positions)}")
+                        
                     # Set evaluation text and value based on outcome
                     if outcome == "AI wins" or outcome == "YELLOW wins":
                         eval_value = 0.1
@@ -745,6 +889,8 @@ class Connect4Analyzer:
                         win_prob = max(0, 10 - moves * 2) if moves else 0
                         win_prob_text = f"Win probability: {win_prob}%"
                         mate_text = f"Mate in {moves}" if moves else "Checkmate"
+                        logger.info(f"YELLOW wins in {moves} moves")
+                        
                     elif outcome == "Player wins" or outcome == "RED wins":
                         eval_value = 0.9
                         eval_text = f"RED wins in {moves} moves" if moves else "RED wins"
@@ -752,26 +898,34 @@ class Connect4Analyzer:
                         win_prob = min(100, 90 + moves * 1) if moves else 100
                         win_prob_text = f"Win probability: {win_prob}%"
                         mate_text = f"Mate in {moves}" if moves else "Checkmate"
+                        logger.info(f"RED wins in {moves} moves")
+                        
                     elif outcome == "Draw":
                         eval_value = 0.5
                         eval_text = "Position is drawn"
                         score_text = "Score: 0.0"
                         win_prob_text = "Win probability: 50%"
+                        logger.info("Position is drawn")
                     elif outcome == "AI likely wins" or outcome == "YELLOW likely wins":
                         eval_value = 0.3
                         eval_text = "YELLOW has a significant advantage"
                         score_text = "Score: -3.0"
                         win_prob_text = "Win probability: 30%"
+                        logger.info("YELLOW has a significant advantage")
                     elif outcome == "Player likely wins" or outcome == "RED likely wins":
                         eval_value = 0.7
                         eval_text = "RED has a significant advantage"
                         score_text = "Score: +3.0"
                         win_prob_text = "Win probability: 70%"
+                        logger.info("RED has a significant advantage")
                     else:
                         # Use heuristic scoring
+                        logger.info("No definitive outcome, using heuristic scoring")
                         ai_score = score_position(self.board, AI_PIECE)
                         player_score = score_position(self.board, PLAYER_PIECE)
                         score_diff = player_score - ai_score
+                        
+                        logger.info(f"Heuristic scores - RED: {player_score}, YELLOW: {ai_score}, diff: {score_diff}")
                         
                         # Convert to evaluation scale (0-1)
                         eval_value = 0.5 + score_diff / 100
@@ -790,7 +944,7 @@ class Connect4Analyzer:
                         else:
                             eval_text = "Position is approximately equal"
                 except Exception as e:
-                    print(f"Evaluation error: {e}")
+                    logger.error(f"Evaluation error: {e}")
                     # Fallback to simple scoring
                     ai_score = score_position(self.board, AI_PIECE)
                     player_score = score_position(self.board, PLAYER_PIECE)
@@ -833,7 +987,7 @@ class Connect4Analyzer:
             # Update UI from main thread
             self.root.after(0, self.update_analysis_ui)
         except Exception as e:
-            print(f"Analysis error: {e}")
+            logger.error(f"Analysis error: {e}")
             self.root.after(0, lambda: self.status_label.config(text=f"Analysis error: {str(e)}"))
             self.is_analyzing = False
     
@@ -947,6 +1101,119 @@ class Connect4Analyzer:
         
         # Mark analysis as complete
         self.is_analyzing = False
+    
+    def show_detailed_evaluation(self):
+        """Display a popup with detailed evaluation information"""
+        if not self.last_analysis_result:
+            messagebox.showinfo("Detailed Evaluation", "No analysis results available yet.")
+            return
+            
+        # Create a detailed explanation window
+        explanation_window = tk.Toplevel(self.root)
+        explanation_window.title("Detailed Evaluation")
+        explanation_window.geometry("650x550")
+        explanation_window.configure(bg="#1E1E1E")
+        
+        # Add a text widget to show the evaluation details
+        explanation_text = tk.Text(
+            explanation_window,
+            wrap=tk.WORD,
+            bg="#1E1E1E",
+            fg=WHITE,
+            font=("Arial", 12),
+            padx=10,
+            pady=10
+        )
+        explanation_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Get basic info from last analysis
+        eval_text = self.last_analysis_result['eval_text']
+        score_text = self.last_analysis_result['score_text']
+        win_prob_text = self.last_analysis_result['win_prob_text']
+        mate_text = self.last_analysis_result['mate_text']
+        
+        # Create detailed explanation
+        explanation = f"# Detailed Position Analysis\n\n"
+        explanation += f"## Current Assessment\n"
+        explanation += f"* {eval_text}\n"
+        explanation += f"* {score_text}\n"
+        explanation += f"* {win_prob_text}\n"
+        
+        if "mate" in mate_text.lower() and "no" not in mate_text.lower():
+            explanation += f"* {mate_text}\n\n"
+            explanation += f"## Mate Explanation\n"
+            explanation += f"When we say '{mate_text}', this means that with perfect play, "
+            explanation += f"{'RED' if 'RED wins' in eval_text else 'YELLOW'} can force a win "
+            explanation += f"no matter what the opponent does.\n\n"
+            
+            # Explain the numbers on the board
+            explanation += f"### Reading the Board\n"
+            explanation += f"The numbers on the pieces show the forced winning sequence:\n"
+            explanation += f"* Pieces with numbers show the optimal move order\n"
+            explanation += f"* Green highlighted pieces form the winning line\n"
+            explanation += f"* The opponent's best response moves are not numbered\n\n"
+            
+            explanation += f"This evaluation is based on a minimax search with alpha-beta pruning "
+            explanation += f"which analyzed all possible responses to a depth of {self.depth_var.get()} plies.\n\n"
+            explanation += f"For a mate to be detected:\n"
+            explanation += f"1. Every possible response by the opponent must still lead to mate\n"
+            explanation += f"2. The winning side must have a clear forced sequence of moves\n"
+            explanation += f"3. The mate must be achievable within the search depth ({self.depth_var.get()} plies)\n\n"
+            explanation += f"If the opponent can find any move that prevents the mate, "
+            explanation += f"then the position would not be considered a forced win.\n"
+        else:
+            explanation += f"\n## Position Evaluation\n"
+            explanation += f"The evaluation is based on several factors:\n"
+            explanation += f"* Center control (pieces in the center columns are more valuable)\n"
+            explanation += f"* Connected pieces (adjacent pieces of the same color)\n"
+            explanation += f"* Threats (three in a row with open fourth spot)\n"
+            explanation += f"* Overall piece positioning and potential winning lines\n\n"
+            explanation += f"The depth of analysis was {self.depth_var.get()} plies "
+            explanation += f"(a ply is a half-move: one player's turn).\n\n"
+            explanation += f"If there is a discrepancy between what you see and the evaluation, "
+            explanation += f"it might be because:\n"
+            explanation += f"1. The search depth is limited (increase for more accuracy)\n"
+            explanation += f"2. The forced win might be more moves ahead than the current search depth\n"
+            explanation += f"3. The perfect play sequence is very specific and any deviation allows the opponent to equalize\n"
+        
+        # Show best moves with more detailed explanations
+        explanation += f"\n## Best Moves\n"
+        for i, move in enumerate(self.last_analysis_result.get('best_moves', [])[:3]):
+            move_info = move.split(":")
+            if len(move_info) >= 2:
+                col_num = move_info[0].strip()
+                score_info = move_info[1].strip()
+                
+                explanation += f"{i+1}. Column {col_num}: {score_info}\n"
+                
+                # Add more detailed explanation for the top move
+                if i == 0 and "Winning" in score_info:
+                    explanation += f"   This move leads to an immediate win.\n"
+                elif i == 0 and float(score_info.replace("+", "")) > 3:
+                    explanation += f"   This move gives a strong advantage.\n"
+                elif i == 0:
+                    explanation += f"   This is the best move in the current position.\n"
+            else:
+                explanation += f"{i+1}. {move}\n"
+        
+        # Add information about analysis parameters
+        explanation += f"\n## Analysis Parameters\n"
+        explanation += f"* Search depth: {self.depth_var.get()} plies\n"
+        explanation += f"* Analysis time: {self.last_analysis_result['analysis_time']:.2f} seconds\n"
+        explanation += f"* Current player: {'RED' if self.current_player == PLAYER_PIECE else 'YELLOW'}\n"
+        
+        # Insert the explanation into the text widget
+        explanation_text.insert(tk.END, explanation)
+        explanation_text.config(state=tk.DISABLED)  # Make read-only
+        
+        # Add a close button
+        close_btn = ttk.Button(
+            explanation_window,
+            text="Close",
+            command=explanation_window.destroy,
+            style='TButton'
+        )
+        close_btn.pack(pady=10)
     
     def switch_to_game_mode(self):
         """Switch to game mode"""
